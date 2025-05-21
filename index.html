@@ -3,18 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Krahcore Runner Game - Avoid the Zones</title>
+<title>Avoid The Zones</title>
 <style>
   body {
-    margin: 0; 
-    background: #001f2f; 
-    color: #00ffff; 
-    font-family: 'Courier New', monospace; 
+    margin: 0; background: #001f2f; color: #00ffff; font-family: 'Courier New', monospace;
+    display: flex; justify-content: center; align-items: center; height: 100vh;
     overflow: hidden;
-    display: flex; 
-    justify-content: center; 
-    align-items: center; 
-    height: 100vh;
     flex-direction: column;
   }
   canvas {
@@ -22,280 +16,237 @@
     box-shadow: 0 0 30px #00ffff;
     border-radius: 10px;
   }
-  button {
-    margin-top: 20px;
-    padding: 10px 20px;
+  #startScreen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #00ffff;
+    text-align: center;
     font-family: monospace;
-    font-size: 18px;
+  }
+  button {
     background: #00ffff;
-    color: #001f2f;
     border: none;
-    border-radius: 6px;
+    padding: 10px 20px;
+    margin-top: 15px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #001f2f;
     cursor: pointer;
+    border-radius: 5px;
     box-shadow: 0 0 10px #00ffff;
   }
   button:hover {
-    background: #00cccc;
-  }
-  #menu, #gameOverScreen {
-    text-align: center;
-    max-width: 600px;
-  }
-  #scoreDisplay {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    font-weight: bold;
-    font-size: 24px;
-    text-shadow: 0 0 10px #00ffff;
+    background: #00ccbb;
   }
 </style>
 </head>
 <body>
-
-<div id="menu">
-  <h1>Krahcore Runner Game</h1>
-  <p>Évite la zone rouge qui se déplace sur l'écran. Utilise les flèches gauche/droite pour te déplacer.</p>
-  <p>Avant que la zone se déplace, elle pulse pour te prévenir. Plus elle pulse, plus elle va vite !</p>
-  <p>Tu gagnes 1 point par seconde.</p>
-  <button id="startBtn">Jouer</button>
-</div>
-
-<canvas id="game-canvas" width="600" height="400" style="display:none;"></canvas>
-
-<div id="scoreDisplay" style="display:none;">Score: 0</div>
-
-<div id="gameOverScreen" style="display:none;">
-  <h2>Game Over !</h2>
-  <p id="finalScore"></p>
-  <button id="restartBtn">Recommencer</button>
-</div>
+  <div id="startScreen">
+    <h1>Krahcore Runner Game - Avoid The Zones</h1>
+    <p>Règles du jeu :</p>
+    <p>Évite la zone rouge qui se déplace horizontalement.</p>
+    <p>Utilise les flèches gauche et droite pour déplacer ton cercle.</p>
+    <p>La zone pulse avant de changer de position, prépare-toi !</p>
+    <p>Le jeu devient plus rapide avec le temps.</p>
+    <button id="startBtn">Jouer</button>
+  </div>
+  <canvas id="game-canvas" width="800" height="300" style="display:none;"></canvas>
 
 <script>
 (() => {
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
+
+  const startScreen = document.getElementById('startScreen');
   const startBtn = document.getElementById('startBtn');
-  const menu = document.getElementById('menu');
-  const gameOverScreen = document.getElementById('gameOverScreen');
-  const finalScoreText = document.getElementById('finalScore');
-  const restartBtn = document.getElementById('restartBtn');
-  const scoreDisplay = document.getElementById('scoreDisplay');
 
   const WIDTH = canvas.width;
   const HEIGHT = canvas.height;
 
-  // Joueur
   const player = {
     x: WIDTH / 2,
-    y: HEIGHT - 50,
+    y: HEIGHT - 60,
     radius: 20,
-    speed: 6,
-    dx: 0,
+    speed: 10
   };
 
-  // Zone rouge
   const zone = {
-    radius: 30,
-    x: Math.random() * (WIDTH - 60) + 30,
-    y: HEIGHT - 50,
-    targetX: 0,
-    pulsing: false,
-    pulseAlpha: 0,
-    pulseDirection: 1,
-    moveSpeed: 3,  // pixels/frame, augmente avec temps
+    x: WIDTH / 2,
+    y: HEIGHT - 60,
+    radius: 40,
+    baseRadius: 40,
+    pulseRadius: 60,
+    pulseDuration: 60,  // frames
+    pulseCount: 0,
     moving: false,
+    targetX: WIDTH / 2,
+    speed: 2
   };
 
   let keys = {};
   let score = 0;
+  let gameSpeed = 2;
   let gameOver = false;
-  let lastMoveTime = 0;
-  let pulseDuration = 500; // ms
-  let pulseStartTime = 0;
-  let moveStartTime = 0;
-  let speedIncreaseInterval = 5000; // toutes les 5s
-  let lastSpeedIncrease = 0;
 
-  function resetGame() {
+  function playSound(frequency, duration=0.1) {
+    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = frequency;
+    osc.start();
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.stop(audioCtx.currentTime + duration);
+  }
+
+  function startGame() {
     player.x = WIDTH / 2;
-    keys = {};
     score = 0;
+    gameSpeed = 2;
     gameOver = false;
-    zone.x = Math.random() * (WIDTH - 60) + 30;
-    zone.targetX = zone.x;
-    zone.pulsing = false;
-    zone.pulseAlpha = 0;
-    zone.pulseDirection = 1;
-    zone.moveSpeed = 3;
+    zone.x = WIDTH / 2;
+    zone.pulseCount = 0;
     zone.moving = false;
-    lastMoveTime = performance.now();
-    pulseStartTime = performance.now();
-    lastSpeedIncrease = performance.now();
-    scoreDisplay.textContent = `Score: 0`;
-    scoreDisplay.style.display = 'block';
-    gameOverScreen.style.display = 'none';
+    zone.speed = gameSpeed;
+    startScreen.style.display = 'none';
+    canvas.style.display = 'block';
+    loop();
   }
 
-  function drawPlayer() {
-    ctx.fillStyle = '#00ffff';
-    ctx.shadowColor = '#00ffff';
-    ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  function update() {
+    if(gameOver) return;
 
-  function drawZone() {
-    // zone normale
-    ctx.fillStyle = '#ff0044';
-    ctx.shadowColor = '#ff0044';
-    ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // pulsation avant déplacement
-    if(zone.pulsing) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(zone.targetX, zone.y, zone.radius + 10, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 0, 68, ${zone.pulseAlpha.toFixed(2)})`;
-      ctx.shadowColor = `rgba(255, 0, 68, ${zone.pulseAlpha.toFixed(2)})`;
-      ctx.shadowBlur = 30;
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  function updatePlayer() {
+    // Player movement
     if(keys['ArrowLeft']) {
-      player.dx = -player.speed;
-    } else if(keys['ArrowRight']) {
-      player.dx = player.speed;
-    } else {
-      player.dx = 0;
+      player.x -= player.speed;
+      if(player.x - player.radius < 0) player.x = player.radius;
+    }
+    if(keys['ArrowRight']) {
+      player.x += player.speed;
+      if(player.x + player.radius > WIDTH) player.x = WIDTH - player.radius;
     }
 
-    player.x += player.dx;
-    // Clamp dans le canvas
-    if(player.x - player.radius < 0) player.x = player.radius;
-    if(player.x + player.radius > WIDTH) player.x = WIDTH - player.radius;
-  }
-
-  function updateZone(delta) {
-    const now = performance.now();
-
-    if(!zone.pulsing && !zone.moving) {
-      // Commencer pulsation : choisir nouvelle targetX
-      zone.targetX = Math.random() * (WIDTH - 60) + 30;
-      zone.pulsing = true;
-      pulseStartTime = now;
-      zone.pulseAlpha = 0;
-      zone.pulseDirection = 1;
-    } else if(zone.pulsing) {
-      // Pulsation en cours
-      let elapsed = now - pulseStartTime;
-      // Pulsation alpha va de 0 à 0.7 et retour sur 0.5s
-      if(elapsed >= pulseDuration) {
-        // fin pulsation, commencer déplacement
-        zone.pulsing = false;
+    // Zone pulse before moving
+    if(!zone.moving) {
+      zone.pulseCount++;
+      if(zone.pulseCount >= zone.pulseDuration) {
         zone.moving = true;
-        moveStartTime = now;
-      } else {
-        // alpha pulsation = sinus pour effet smooth
-        const t = elapsed / pulseDuration;
-        zone.pulseAlpha = 0.7 * Math.sin(t * Math.PI);
+        zone.pulseCount = 0;
+        // Choisit nouvelle position targetX proche de la position actuelle
+        const moveRange = 200;
+        const minX = zone.radius;
+        const maxX = WIDTH - zone.radius;
+        let newX;
+        do {
+          newX = zone.x + (Math.random() * 2 - 1) * moveRange;
+          newX = Math.min(Math.max(newX, minX), maxX);
+        } while(Math.abs(newX - zone.x) < 50); // éviter déplacement trop petit
+        zone.targetX = newX;
+        zone.speed = gameSpeed;
       }
-    } else if(zone.moving) {
-      // Déplacement vers targetX
-      const dir = zone.targetX > zone.x ? 1 : -1;
-      zone.x += dir * zone.moveSpeed;
-
-      if((dir === 1 && zone.x >= zone.targetX) || (dir === -1 && zone.x <= zone.targetX)) {
+    } else {
+      // Déplacement zone vers targetX
+      if(Math.abs(zone.x - zone.targetX) < zone.speed) {
         zone.x = zone.targetX;
         zone.moving = false;
-        lastMoveTime = now;
+      } else {
+        zone.x += (zone.targetX > zone.x ? 1 : -1) * zone.speed;
       }
     }
 
-    // Augmentation progressive de la vitesse
-    if(now - lastSpeedIncrease > speedIncreaseInterval) {
-      zone.moveSpeed += 0.3;
-      lastSpeedIncrease = now;
-    }
-  }
+    // Augmente la vitesse progressivement
+    gameSpeed += 0.001;
+    zone.speed = gameSpeed;
 
-  function checkCollision() {
-    // Collision cercle joueur et cercle zone : distance centres < somme rayons
+    // Score basé sur le temps en frames (60fps)
+    score += 1/60;
+
+    // Collision cercle à cercle
     const dx = player.x - zone.x;
     const dy = player.y - zone.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    return dist < player.radius + zone.radius;
+    if(dist < player.radius + zone.radius) {
+      gameOver = true;
+      playSound(100, 0.5);
+    }
   }
 
-  function drawScore() {
-    scoreDisplay.textContent = `Score: ${score}`;
-  }
-
-  function gameLoop(timestamp) {
-    if(gameOver) return;
-
+  function draw() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
-    updatePlayer();
-    updateZone();
-
-    drawPlayer();
-    drawZone();
-
-    if(checkCollision()) {
-      gameOver = true;
-      scoreDisplay.style.display = 'none';
-      finalScoreText.textContent = `Ton score : ${score}`;
-      gameOverScreen.style.display = 'block';
-      return;
+    // Draw zone with pulse effect
+    ctx.save();
+    ctx.shadowColor = '#ff0044';
+    ctx.shadowBlur = 20;
+    let currentRadius = zone.baseRadius;
+    if(!zone.moving) {
+      // pulse interpolation
+      const pulseProgress = zone.pulseCount / zone.pulseDuration;
+      const pulseRadius = zone.baseRadius + (zone.pulseRadius - zone.baseRadius) * (Math.sin(pulseProgress * Math.PI));
+      currentRadius = pulseRadius;
     }
+    ctx.fillStyle = '#ff0044';
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, currentRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
-    drawScore();
+    // Draw player
+    ctx.save();
+    ctx.fillStyle = '#00ffff';
+    ctx.shadowColor = '#00ffff';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
-    // Score augmente d'1 point par seconde
-    if(!this.lastScoreUpdate) this.lastScoreUpdate = timestamp;
-    if(timestamp - this.lastScoreUpdate > 1000) {
-      score++;
-      this.lastScoreUpdate = timestamp;
-      drawScore();
+    // Draw score
+    ctx.fillStyle = '#00ffff';
+    ctx.font = 'bold 24px monospace';
+    ctx.shadowColor = '#00ffff';
+    ctx.shadowBlur = 10;
+    ctx.fillText(`Score: ${Math.floor(score)}`, 20, 40);
+
+    if(gameOver) {
+      ctx.fillStyle = '#ff0044';
+      ctx.font = 'bold 48px monospace';
+      ctx.fillText('Game Over!', WIDTH / 2 - 130, HEIGHT / 2);
+      ctx.font = '24px monospace';
+      ctx.fillText(`Score final : ${Math.floor(score)}`, WIDTH / 2 - 110, HEIGHT / 2 + 40);
+      ctx.fillText('Recharge la page pour rejouer', WIDTH / 2 - 140, HEIGHT / 2 + 80);
     }
+  }
 
-    requestAnimationFrame(gameLoop);
+  function loop() {
+    update();
+    draw();
+    if(!gameOver) requestAnimationFrame(loop);
   }
 
   // Gestion des touches
   window.addEventListener('keydown', e => {
     if(e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
       keys[e.key] = true;
     }
   });
   window.addEventListener('keyup', e => {
     if(e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
       keys[e.key] = false;
     }
   });
 
   startBtn.addEventListener('click', () => {
-    menu.style.display = 'none';
-    canvas.style.display = 'block';
-    resetGame();
-    requestAnimationFrame(gameLoop);
-  });
-
-  restartBtn.addEventListener('click', () => {
-    gameOverScreen.style.display = 'none';
-    resetGame();
-    requestAnimationFrame(gameLoop);
+    startGame();
   });
 })();
 </script>
-
 </body>
 </html>
