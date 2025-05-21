@@ -3,18 +3,20 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Avoid the Zones</title>
+<title>Avoid the Zones - Version améliorée</title>
 <style>
   body {
     margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh;
     color: #0ff; font-family: monospace;
     user-select: none;
+    overflow: hidden;
   }
   canvas {
     background: #222;
     border: 3px solid #0ff;
     border-radius: 8px;
-    box-shadow: 0 0 20px #0ff;
+    box-shadow: 0 0 25px #0ff;
+    display: block;
   }
   #game-over {
     position: absolute;
@@ -25,20 +27,22 @@
     font-size: 48px;
     font-weight: bold;
     display: none;
+    text-shadow: 0 0 20px #f33;
   }
   #restart-btn {
     position: absolute;
     top: 60%;
     left: 50%;
     transform: translateX(-50%);
-    padding: 10px 20px;
+    padding: 12px 25px;
     font-size: 20px;
     background: #0ff;
     color: #111;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
     display: none;
+    box-shadow: 0 0 15px #0ff;
   }
 </style>
 </head>
@@ -56,61 +60,66 @@
   const WIDTH = canvas.width;
   const HEIGHT = canvas.height;
 
-  // Joueur
+  // Joueur (cercle)
   const player = {
-    x: WIDTH / 2 - 15,
-    y: HEIGHT / 2 - 15,
-    size: 30,
-    speed: 5,
+    x: WIDTH / 2,
+    y: HEIGHT / 2,
+    radius: 15,
+    speed: 6,
     dx: 0,
     dy: 0,
+    trail: [],
   };
 
-  // Zone dangereuse
+  // Zone dangereuse (cercle)
   const zone = {
-    x: Math.random() * (WIDTH - 100),
-    y: Math.random() * (HEIGHT - 100),
-    width: 100,
-    height: 100,
+    x: Math.random() * (WIDTH - 120) + 60,
+    y: Math.random() * (HEIGHT - 120) + 60,
+    radius: 50,
     timer: 0,
-    changeInterval: 150, // frames avant de changer de position (~2.5s à 60fps)
+    changeInterval: 80, // frames avant de changer (~1.3s à 60fps)
+    pulse: 0,
+    pulseSpeed: 0.05,
   };
 
   let score = 0;
   let gameOver = false;
+  let lastScoreTime = 0;
 
-  // Gérer les touches pressées
+  // Touches pressées
   const keys = {};
-  window.addEventListener('keydown', e => {
-    keys[e.key] = true;
-  });
-  window.addEventListener('keyup', e => {
-    keys[e.key] = false;
-  });
+  window.addEventListener('keydown', e => { keys[e.key] = true; });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
 
   function movePlayer() {
-    if (keys['ArrowUp'] && player.y > 0) player.y -= player.speed;
-    if (keys['ArrowDown'] && player.y < HEIGHT - player.size) player.y += player.speed;
-    if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
-    if (keys['ArrowRight'] && player.x < WIDTH - player.size) player.x += player.speed;
+    if (keys['ArrowUp'] && player.y - player.radius > 0) player.y -= player.speed;
+    if (keys['ArrowDown'] && player.y + player.radius < HEIGHT) player.y += player.speed;
+    if (keys['ArrowLeft'] && player.x - player.radius > 0) player.x -= player.speed;
+    if (keys['ArrowRight'] && player.x + player.radius < WIDTH) player.x += player.speed;
+
+    // Enregistrer la position pour le trail (limite 10 points)
+    player.trail.push({ x: player.x, y: player.y, alpha: 1 });
+    if (player.trail.length > 12) player.trail.shift();
   }
 
   function updateZone() {
     zone.timer++;
+    zone.pulse += zone.pulseSpeed;
+    if (zone.pulse > Math.PI * 2) zone.pulse = 0;
+
     if (zone.timer >= zone.changeInterval) {
       zone.timer = 0;
-      zone.x = Math.random() * (WIDTH - zone.width);
-      zone.y = Math.random() * (HEIGHT - zone.height);
+      zone.x = Math.random() * (WIDTH - 120) + 60;
+      zone.y = Math.random() * (HEIGHT - 120) + 60;
     }
   }
 
   function checkCollision() {
-    if (
-      player.x < zone.x + zone.width &&
-      player.x + player.size > zone.x &&
-      player.y < zone.y + zone.height &&
-      player.y + player.size > zone.y
-    ) {
+    const dx = player.x - zone.x;
+    const dy = player.y - zone.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < player.radius + zone.radius) {
       gameOver = true;
       showGameOver();
     }
@@ -122,42 +131,81 @@
   }
 
   function resetGame() {
-    player.x = WIDTH / 2 - 15;
-    player.y = HEIGHT / 2 - 15;
+    player.x = WIDTH / 2;
+    player.y = HEIGHT / 2;
+    player.trail = [];
     score = 0;
     gameOver = false;
-    zone.x = Math.random() * (WIDTH - zone.width);
-    zone.y = Math.random() * (HEIGHT - zone.height);
+    zone.x = Math.random() * (WIDTH - 120) + 60;
+    zone.y = Math.random() * (HEIGHT - 120) + 60;
     zone.timer = 0;
+    lastScoreTime = performance.now();
     document.getElementById('game-over').style.display = 'none';
     document.getElementById('restart-btn').style.display = 'none';
     loop();
   }
 
   function updateScore() {
-    score++;
+    const now = performance.now();
+    if (now - lastScoreTime >= 1000) {
+      score++;
+      lastScoreTime = now;
+    }
+  }
+
+  function drawTrail() {
+    for (let i = 0; i < player.trail.length; i++) {
+      const point = player.trail[i];
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(0,255,255,${point.alpha * 0.3})`;
+      ctx.shadowColor = '#0ff';
+      ctx.shadowBlur = 10;
+      ctx.arc(point.x, point.y, player.radius - 2, 0, Math.PI * 2);
+      ctx.fill();
+      point.alpha -= 0.05;
+      if (point.alpha < 0) point.alpha = 0;
+    }
   }
 
   function draw() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
-    // Zone dangereuse (rouge)
+    // Zone dangereuse pulsante
+    const pulseRadius = zone.radius + Math.sin(zone.pulse) * 5;
+    const gradient = ctx.createRadialGradient(zone.x, zone.y, pulseRadius * 0.4, zone.x, zone.y, pulseRadius);
+    gradient.addColorStop(0, 'rgba(255, 50, 50, 0.8)');
+    gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
+    ctx.fillStyle = gradient;
+    ctx.shadowColor = '#f33';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, pulseRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Zone cercle pleine plus nette
+    ctx.beginPath();
     ctx.fillStyle = '#f33';
     ctx.shadowColor = '#f33';
-    ctx.shadowBlur = 15;
-    ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+    ctx.shadowBlur = 30;
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Joueur (bleu)
+    // Draw player trail
+    drawTrail();
+
+    // Joueur cercle
+    ctx.beginPath();
     ctx.fillStyle = '#0ff';
     ctx.shadowColor = '#0ff';
-    ctx.shadowBlur = 15;
-    ctx.fillRect(player.x, player.y, player.size, player.size);
+    ctx.shadowBlur = 25;
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
 
     // Score
     ctx.fillStyle = '#0ff';
     ctx.font = 'bold 24px monospace';
     ctx.shadowColor = '#0ff';
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 15;
     ctx.fillText(`Score: ${score}`, 20, 30);
   }
 
@@ -173,6 +221,7 @@
 
   document.getElementById('restart-btn').addEventListener('click', resetGame);
 
+  lastScoreTime = performance.now();
   loop();
 })();
 </script>
