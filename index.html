@@ -3,270 +3,297 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Avoid the Zones - Krahcore Runner Game</title>
+<title>Krahcore Runner Game - Avoid the Zones</title>
 <style>
   body {
-    margin: 0; background: #111; color: #0ff; font-family: monospace;
-    user-select: none; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh;
-  }
-  #container {
-    position: relative; width: 600px; height: 400px;
+    margin: 0; 
+    background: #001f2f; 
+    color: #00ffff; 
+    font-family: 'Courier New', monospace; 
+    overflow: hidden;
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    height: 100vh;
+    flex-direction: column;
   }
   canvas {
-    background: #222;
-    border: 3px solid #0ff;
-    border-radius: 8px;
-    box-shadow: 0 0 25px #0ff;
-    display: block;
-    margin: 0 auto;
+    background: #001f2f;
+    box-shadow: 0 0 30px #00ffff;
+    border-radius: 10px;
   }
-  #game-over {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #f33;
-    font-size: 48px;
-    font-weight: bold;
-    display: none;
-    text-shadow: 0 0 20px #f33;
-    user-select: none;
-  }
-  #restart-btn, #start-btn {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 12px 25px;
-    font-size: 20px;
-    background: #0ff;
-    color: #111;
+  button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-family: monospace;
+    font-size: 18px;
+    background: #00ffff;
+    color: #001f2f;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    box-shadow: 0 0 15px #0ff;
-    user-select: none;
+    box-shadow: 0 0 10px #00ffff;
   }
-  #restart-btn {
-    top: 60%;
-    display: none;
+  button:hover {
+    background: #00cccc;
   }
-  #start-btn {
-    top: 80%;
-  }
-  #menu {
-    position: absolute;
-    top: 10px;
-    width: 100%;
-    color: #0ff;
+  #menu, #gameOverScreen {
     text-align: center;
-    user-select: none;
+    max-width: 600px;
   }
-  #menu h1 {
-    margin-bottom: 10px;
-  }
-  #menu p {
-    margin: 6px 20px;
-    line-height: 1.4;
+  #scoreDisplay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-weight: bold;
+    font-size: 24px;
+    text-shadow: 0 0 10px #00ffff;
   }
 </style>
 </head>
 <body>
 
-<div id="container">
-  <canvas id="gameCanvas" width="600" height="400" style="display:none;"></canvas>
-  <div id="menu">
-    <h1>Krahcore Runner Game</h1>
-    <p>Évite la zone rouge qui se déplace autour de toi.</p>
-    <p>Utilise les flèches directionnelles pour déplacer ton joueur (cercle cyan).</p>
-    <p>Le score augmente d'un point chaque seconde passée sans toucher la zone.</p>
-    <p>Ne touche pas la zone rouge, sinon c’est game over !</p>
-    <button id="start-btn">Jouer</button>
-  </div>
-  <div id="game-over">Game Over!</div>
-  <button id="restart-btn">Recommencer</button>
+<div id="menu">
+  <h1>Krahcore Runner Game</h1>
+  <p>Évite la zone rouge qui se déplace sur l'écran. Utilise les flèches gauche/droite pour te déplacer.</p>
+  <p>Avant que la zone se déplace, elle pulse pour te prévenir. Plus elle pulse, plus elle va vite !</p>
+  <p>Tu gagnes 1 point par seconde.</p>
+  <button id="startBtn">Jouer</button>
+</div>
+
+<canvas id="game-canvas" width="600" height="400" style="display:none;"></canvas>
+
+<div id="scoreDisplay" style="display:none;">Score: 0</div>
+
+<div id="gameOverScreen" style="display:none;">
+  <h2>Game Over !</h2>
+  <p id="finalScore"></p>
+  <button id="restartBtn">Recommencer</button>
 </div>
 
 <script>
 (() => {
-  const canvas = document.getElementById('gameCanvas');
+  const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
+  const startBtn = document.getElementById('startBtn');
   const menu = document.getElementById('menu');
-  const startBtn = document.getElementById('start-btn');
-  const gameOverText = document.getElementById('game-over');
-  const restartBtn = document.getElementById('restart-btn');
-  const container = document.getElementById('container');
+  const gameOverScreen = document.getElementById('gameOverScreen');
+  const finalScoreText = document.getElementById('finalScore');
+  const restartBtn = document.getElementById('restartBtn');
+  const scoreDisplay = document.getElementById('scoreDisplay');
 
   const WIDTH = canvas.width;
   const HEIGHT = canvas.height;
 
+  // Joueur
   const player = {
     x: WIDTH / 2,
-    y: HEIGHT / 2,
-    radius: 15,
+    y: HEIGHT - 50,
+    radius: 20,
     speed: 6,
-    trail: [],
+    dx: 0,
   };
 
+  // Zone rouge
   const zone = {
-    x: Math.random() * (WIDTH - 120) + 60,
-    y: Math.random() * (HEIGHT - 120) + 60,
-    radius: 50,
-    timer: 0,
-    changeInterval: 80,
-    pulse: 0,
-    pulseSpeed: 0.05,
+    radius: 30,
+    x: Math.random() * (WIDTH - 60) + 30,
+    y: HEIGHT - 50,
+    targetX: 0,
+    pulsing: false,
+    pulseAlpha: 0,
+    pulseDirection: 1,
+    moveSpeed: 3,  // pixels/frame, augmente avec temps
+    moving: false,
   };
 
+  let keys = {};
   let score = 0;
   let gameOver = false;
-  let lastScoreTime = 0;
-  const keys = {};
+  let lastMoveTime = 0;
+  let pulseDuration = 500; // ms
+  let pulseStartTime = 0;
+  let moveStartTime = 0;
+  let speedIncreaseInterval = 5000; // toutes les 5s
+  let lastSpeedIncrease = 0;
 
-  function initListeners() {
-    window.addEventListener('keydown', e => { keys[e.key] = true; });
-    window.addEventListener('keyup', e => { keys[e.key] = false; });
+  function resetGame() {
+    player.x = WIDTH / 2;
+    keys = {};
+    score = 0;
+    gameOver = false;
+    zone.x = Math.random() * (WIDTH - 60) + 30;
+    zone.targetX = zone.x;
+    zone.pulsing = false;
+    zone.pulseAlpha = 0;
+    zone.pulseDirection = 1;
+    zone.moveSpeed = 3;
+    zone.moving = false;
+    lastMoveTime = performance.now();
+    pulseStartTime = performance.now();
+    lastSpeedIncrease = performance.now();
+    scoreDisplay.textContent = `Score: 0`;
+    scoreDisplay.style.display = 'block';
+    gameOverScreen.style.display = 'none';
   }
 
-  function movePlayer() {
-    if (keys['ArrowUp'] && player.y - player.radius > 0) player.y -= player.speed;
-    if (keys['ArrowDown'] && player.y + player.radius < HEIGHT) player.y += player.speed;
-    if (keys['ArrowLeft'] && player.x - player.radius > 0) player.x -= player.speed;
-    if (keys['ArrowRight'] && player.x + player.radius < WIDTH) player.x += player.speed;
-
-    player.trail.push({ x: player.x, y: player.y, alpha: 1 });
-    if (player.trail.length > 12) player.trail.shift();
+  function drawPlayer() {
+    ctx.fillStyle = '#00ffff';
+    ctx.shadowColor = '#00ffff';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  function updateZone() {
-    zone.timer++;
-    zone.pulse += zone.pulseSpeed;
-    if (zone.pulse > Math.PI * 2) zone.pulse = 0;
+  function drawZone() {
+    // zone normale
+    ctx.fillStyle = '#ff0044';
+    ctx.shadowColor = '#ff0044';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+    ctx.fill();
 
-    if (zone.timer >= zone.changeInterval) {
-      zone.timer = 0;
-      zone.x = Math.random() * (WIDTH - 120) + 60;
-      zone.y = Math.random() * (HEIGHT - 120) + 60;
+    // pulsation avant déplacement
+    if(zone.pulsing) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(zone.targetX, zone.y, zone.radius + 10, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 0, 68, ${zone.pulseAlpha.toFixed(2)})`;
+      ctx.shadowColor = `rgba(255, 0, 68, ${zone.pulseAlpha.toFixed(2)})`;
+      ctx.shadowBlur = 30;
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function updatePlayer() {
+    if(keys['ArrowLeft']) {
+      player.dx = -player.speed;
+    } else if(keys['ArrowRight']) {
+      player.dx = player.speed;
+    } else {
+      player.dx = 0;
+    }
+
+    player.x += player.dx;
+    // Clamp dans le canvas
+    if(player.x - player.radius < 0) player.x = player.radius;
+    if(player.x + player.radius > WIDTH) player.x = WIDTH - player.radius;
+  }
+
+  function updateZone(delta) {
+    const now = performance.now();
+
+    if(!zone.pulsing && !zone.moving) {
+      // Commencer pulsation : choisir nouvelle targetX
+      zone.targetX = Math.random() * (WIDTH - 60) + 30;
+      zone.pulsing = true;
+      pulseStartTime = now;
+      zone.pulseAlpha = 0;
+      zone.pulseDirection = 1;
+    } else if(zone.pulsing) {
+      // Pulsation en cours
+      let elapsed = now - pulseStartTime;
+      // Pulsation alpha va de 0 à 0.7 et retour sur 0.5s
+      if(elapsed >= pulseDuration) {
+        // fin pulsation, commencer déplacement
+        zone.pulsing = false;
+        zone.moving = true;
+        moveStartTime = now;
+      } else {
+        // alpha pulsation = sinus pour effet smooth
+        const t = elapsed / pulseDuration;
+        zone.pulseAlpha = 0.7 * Math.sin(t * Math.PI);
+      }
+    } else if(zone.moving) {
+      // Déplacement vers targetX
+      const dir = zone.targetX > zone.x ? 1 : -1;
+      zone.x += dir * zone.moveSpeed;
+
+      if((dir === 1 && zone.x >= zone.targetX) || (dir === -1 && zone.x <= zone.targetX)) {
+        zone.x = zone.targetX;
+        zone.moving = false;
+        lastMoveTime = now;
+      }
+    }
+
+    // Augmentation progressive de la vitesse
+    if(now - lastSpeedIncrease > speedIncreaseInterval) {
+      zone.moveSpeed += 0.3;
+      lastSpeedIncrease = now;
     }
   }
 
   function checkCollision() {
+    // Collision cercle joueur et cercle zone : distance centres < somme rayons
     const dx = player.x - zone.x;
     const dy = player.y - zone.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist < player.radius + zone.radius) {
-      gameOver = true;
-      showGameOver();
-    }
+    return dist < player.radius + zone.radius;
   }
 
-  function showGameOver() {
-    gameOverText.style.display = 'block';
-    restartBtn.style.display = 'block';
+  function drawScore() {
+    scoreDisplay.textContent = `Score: ${score}`;
   }
 
-  function resetGame() {
-    player.x = WIDTH / 2;
-    player.y = HEIGHT / 2;
-    player.trail = [];
-    score = 0;
-    gameOver = false;
-    zone.x = Math.random() * (WIDTH - 120) + 60;
-    zone.y = Math.random() * (HEIGHT - 120) + 60;
-    zone.timer = 0;
-    lastScoreTime = performance.now();
-    gameOverText.style.display = 'none';
-    restartBtn.style.display = 'none';
-    loop();
-  }
+  function gameLoop(timestamp) {
+    if(gameOver) return;
 
-  function updateScore() {
-    const now = performance.now();
-    if (now - lastScoreTime >= 1000) {
-      score++;
-      lastScoreTime = now;
-    }
-  }
-
-  function drawTrail() {
-    for (let i = 0; i < player.trail.length; i++) {
-      const point = player.trail[i];
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(0,255,255,${point.alpha * 0.3})`;
-      ctx.shadowColor = '#0ff';
-      ctx.shadowBlur = 10;
-      ctx.arc(point.x, point.y, player.radius - 2, 0, Math.PI * 2);
-      ctx.fill();
-      point.alpha -= 0.05;
-      if (point.alpha < 0) point.alpha = 0;
-    }
-  }
-
-  function draw() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
-    // Zone pulsante
-    const pulseRadius = zone.radius + Math.sin(zone.pulse) * 5;
-    const gradient = ctx.createRadialGradient(zone.x, zone.y, pulseRadius * 0.4, zone.x, zone.y, pulseRadius);
-    gradient.addColorStop(0, 'rgba(255, 50, 50, 0.8)');
-    gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
-    ctx.fillStyle = gradient;
-    ctx.shadowColor = '#f33';
-    ctx.shadowBlur = 20;
-    ctx.beginPath();
-    ctx.arc(zone.x, zone.y, pulseRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Zone pleine
-    ctx.beginPath();
-    ctx.fillStyle = '#f33';
-    ctx.shadowColor = '#f33';
-    ctx.shadowBlur = 30;
-    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    drawTrail();
-
-    // Joueur
-    ctx.beginPath();
-    ctx.fillStyle = '#0ff';
-    ctx.shadowColor = '#0ff';
-    ctx.shadowBlur = 25;
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Score
-    ctx.fillStyle = '#0ff';
-    ctx.font = 'bold 24px monospace';
-    ctx.shadowColor = '#0ff';
-    ctx.shadowBlur = 15;
-    ctx.fillText(`Score: ${score}`, 20, 30);
-  }
-
-  function loop() {
-    if (gameOver) return;
-    movePlayer();
+    updatePlayer();
     updateZone();
-    checkCollision();
-    updateScore();
-    draw();
-    requestAnimationFrame(loop);
+
+    drawPlayer();
+    drawZone();
+
+    if(checkCollision()) {
+      gameOver = true;
+      scoreDisplay.style.display = 'none';
+      finalScoreText.textContent = `Ton score : ${score}`;
+      gameOverScreen.style.display = 'block';
+      return;
+    }
+
+    drawScore();
+
+    // Score augmente d'1 point par seconde
+    if(!this.lastScoreUpdate) this.lastScoreUpdate = timestamp;
+    if(timestamp - this.lastScoreUpdate > 1000) {
+      score++;
+      this.lastScoreUpdate = timestamp;
+      drawScore();
+    }
+
+    requestAnimationFrame(gameLoop);
   }
+
+  // Gestion des touches
+  window.addEventListener('keydown', e => {
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      keys[e.key] = true;
+    }
+  });
+  window.addEventListener('keyup', e => {
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      keys[e.key] = false;
+    }
+  });
 
   startBtn.addEventListener('click', () => {
     menu.style.display = 'none';
     canvas.style.display = 'block';
-    initListeners();
     resetGame();
+    requestAnimationFrame(gameLoop);
   });
 
   restartBtn.addEventListener('click', () => {
-    menu.style.display = 'block';
-    canvas.style.display = 'none';
-    gameOverText.style.display = 'none';
-    restartBtn.style.display = 'none';
+    gameOverScreen.style.display = 'none';
+    resetGame();
+    requestAnimationFrame(gameLoop);
   });
-
 })();
 </script>
 
