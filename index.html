@@ -53,7 +53,7 @@
 <body>
   <div id="startScreen">
     <h1>Avoid the Zones</h1>
-    <p>Use arrow keys or ZQSD to move.<br />Avoid the red zone and obstacles.<br />Your score increases every second.</p>
+    <p>Use arrow keys or ZQSD to move.<br />Avoid the red zone and the obstacles as long as you can.<br />Your score increases every second.</p>
     <button onclick="startGame()">Start Game</button>
   </div>
 
@@ -86,14 +86,20 @@
     };
 
     let obstacles = [];
-    for (let i = 0; i < 5; i++) {
-      obstacles.push({
-        x: Math.random() * 760,
-        y: Math.random() * 560,
-        width: 40,
-        height: 40
-      });
+    let signalFlash = false;
+    let nextObstacleMove = Date.now() + 10000;
+
+    function generateObstacles() {
+      obstacles = [];
+      for (let i = 0; i < 5; i++) {
+        const size = 30;
+        const x = Math.random() * (canvas.width - size);
+        const y = Math.random() * (canvas.height - size);
+        obstacles.push({ x, y, size });
+      }
     }
+
+    generateObstacles();
 
     let score = 0;
     let gameInterval;
@@ -134,10 +140,10 @@
     }
 
     function drawObstacles() {
-      ctx.fillStyle = "#555";
-      obstacles.forEach(ob => {
-        ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
-      });
+      for (const obs of obstacles) {
+        ctx.fillStyle = signalFlash ? "yellow" : "#555";
+        ctx.fillRect(obs.x, obs.y, obs.size, obs.size);
+      }
     }
 
     function movePlayer() {
@@ -177,15 +183,13 @@
       const distance = Math.sqrt(dx * dx + dy * dy);
       if (distance < zone.radius + player.size / 2) return true;
 
-      for (let ob of obstacles) {
+      for (const obs of obstacles) {
         if (
-          player.x < ob.x + ob.width &&
-          player.x + player.size > ob.x &&
-          player.y < ob.y + ob.height &&
-          player.y + player.size > ob.y
-        ) {
-          return true;
-        }
+          player.x < obs.x + obs.size &&
+          player.x + player.size > obs.x &&
+          player.y < obs.y + obs.size &&
+          player.y + player.size > obs.y
+        ) return true;
       }
 
       return false;
@@ -195,6 +199,15 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       movePlayer();
       moveZone(time);
+
+      if (Date.now() > nextObstacleMove - 1000) signalFlash = !signalFlash;
+
+      if (Date.now() > nextObstacleMove) {
+        generateObstacles();
+        signalFlash = false;
+        nextObstacleMove = Date.now() + 10000;
+      }
+
       drawZone();
       drawObstacles();
       drawPlayer();
