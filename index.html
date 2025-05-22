@@ -53,7 +53,7 @@
 <body>
   <div id="startScreen">
     <h1>Avoid the Zones</h1>
-    <p>Use arrow keys or ZQSD to move.<br />Avoid the red zone as long as you can.<br />Your score increases every second.</p>
+    <p>Use arrow keys or ZQSD to move.<br />Avoid the red zone and obstacles.<br />Your score increases every second.</p>
     <button onclick="startGame()">Start Game</button>
   </div>
 
@@ -81,8 +81,19 @@
       radius: 30,
       pulse: 0,
       speed: 2.5,
-      nextMoveTime: 0
+      nextMoveTime: 0,
+      lastTarget: { x: 400, y: 300 }
     };
+
+    let obstacles = [];
+    for (let i = 0; i < 5; i++) {
+      obstacles.push({
+        x: Math.random() * 760,
+        y: Math.random() * 560,
+        width: 40,
+        height: 40
+      });
+    }
 
     let score = 0;
     let gameInterval;
@@ -122,6 +133,13 @@
       zone.pulse += 0.1;
     }
 
+    function drawObstacles() {
+      ctx.fillStyle = "#555";
+      obstacles.forEach(ob => {
+        ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
+      });
+    }
+
     function movePlayer() {
       if (keys["arrowup"] || keys["z"]) player.y -= player.speed;
       if (keys["arrowdown"] || keys["s"]) player.y += player.speed;
@@ -139,7 +157,7 @@
         const dist = Math.hypot(dx, dy);
 
         if (dist > 0) {
-          const angleOffset = (Math.random() - 0.5) * 0.5; // décalage aléatoire
+          const angleOffset = (Math.random() - 0.5) * 1.2;
           const angle = Math.atan2(dy, dx) + angleOffset;
           const nx = Math.cos(angle);
           const ny = Math.sin(angle);
@@ -149,7 +167,7 @@
           zone.speed += 0.003;
         }
 
-        zone.nextMoveTime = time + 500;
+        zone.nextMoveTime = time + 700;
       }
     }
 
@@ -157,7 +175,20 @@
       const dx = player.x + player.size / 2 - zone.x;
       const dy = player.y + player.size / 2 - zone.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      return distance < zone.radius + player.size / 2;
+      if (distance < zone.radius + player.size / 2) return true;
+
+      for (let ob of obstacles) {
+        if (
+          player.x < ob.x + ob.width &&
+          player.x + player.size > ob.x &&
+          player.y < ob.y + ob.height &&
+          player.y + player.size > ob.y
+        ) {
+          return true;
+        }
+      }
+
+      return false;
     }
 
     function gameLoop(time) {
@@ -165,6 +196,7 @@
       movePlayer();
       moveZone(time);
       drawZone();
+      drawObstacles();
       drawPlayer();
 
       ctx.fillStyle = "#fff";
