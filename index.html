@@ -53,7 +53,7 @@
 <body>
   <div id="startScreen">
     <h1>Avoid the Zones</h1>
-    <p>Utilise les touches ZQSD pour bouger<br />Evite la zone rouge aussi longtemps que tu peux.<br />Ton score augmente de 1 point par seconde (sauf pour Jean-Guile)</p>
+    <p>Use arrow keys or ZQSD to move.<br />Avoid the red zone as long as you can.<br />Your score increases every second.</p>
     <button onclick="startGame()">Start Game</button>
   </div>
 
@@ -80,7 +80,7 @@
       y: Math.random() * 600,
       radius: 30,
       pulse: 0,
-      speed: 1.5,
+      speed: 2.5,
       nextMoveTime: 0
     };
 
@@ -96,7 +96,6 @@
     }
 
     function drawPlayer() {
-      // Draw trail
       player.trail.push({ x: player.x, y: player.y, alpha: 1 });
       if (player.trail.length > 20) player.trail.shift();
 
@@ -107,7 +106,6 @@
         t.alpha -= 0.05;
       }
 
-      // Draw player
       ctx.fillStyle = "#00ff99";
       ctx.fillRect(player.x, player.y, player.size, player.size);
     }
@@ -125,10 +123,10 @@
     }
 
     function movePlayer() {
-      if (keys["ArrowUp"] || keys["z"]) player.y -= player.speed;
-      if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
-      if (keys["ArrowLeft"] || keys["q"]) player.x -= player.speed;
-      if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
+      if (keys["arrowup"] || keys["z"]) player.y -= player.speed;
+      if (keys["arrowdown"] || keys["s"]) player.y += player.speed;
+      if (keys["arrowleft"] || keys["q"]) player.x -= player.speed;
+      if (keys["arrowright"] || keys["d"]) player.x += player.speed;
 
       player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
       player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
@@ -136,15 +134,22 @@
 
     function moveZone(time) {
       if (time > zone.nextMoveTime) {
-        const dx = player.x - zone.x;
-        const dy = player.y - zone.y;
+        const dx = player.x + player.size / 2 - zone.x;
+        const dy = player.y + player.size / 2 - zone.y;
         const dist = Math.hypot(dx, dy);
-        const nx = dx / dist;
-        const ny = dy / dist;
-        zone.x += nx * zone.speed * 20;
-        zone.y += ny * zone.speed * 20;
+
+        if (dist > 0) {
+          const angleOffset = (Math.random() - 0.5) * 0.5; // décalage aléatoire
+          const angle = Math.atan2(dy, dx) + angleOffset;
+          const nx = Math.cos(angle);
+          const ny = Math.sin(angle);
+
+          zone.x += nx * zone.speed * 20;
+          zone.y += ny * zone.speed * 20;
+          zone.speed += 0.003;
+        }
+
         zone.nextMoveTime = time + 500;
-        zone.speed += 0.002;
       }
     }
 
