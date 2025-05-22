@@ -1,207 +1,184 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avoid the Zones</title>
   <style>
-    html, body {
+    * {
       margin: 0;
       padding: 0;
-      background: #0d0d0d;
-      font-family: 'Courier New', monospace;
-      color: #00ffff;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
       overflow: hidden;
     }
-    #home, #game-over {
+    #startScreen, #gameOverScreen {
       position: absolute;
-      top: 0; left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: #000a;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
       display: flex;
       flex-direction: column;
-      align-items: center;
       justify-content: center;
+      align-items: center;
       z-index: 10;
+      color: white;
     }
-    #home h1, #game-over h1 {
-      font-size: 2em;
-    }
-    #start-btn, #restart-btn {
-      margin-top: 20px;
-      padding: 10px 20px;
-      background: #00ffff;
-      color: #000;
-      border: none;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    canvas {
+    #gameCanvas {
       display: block;
       margin: auto;
-      background: #001f2f;
+      background: radial-gradient(circle at center, #1e1e1e, #111);
+      border: 2px solid #fff;
+      box-shadow: 0 0 20px #00ff99;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #ff4757;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #ff6b81;
     }
   </style>
 </head>
 <body>
-  <div id="home">
+  <div id="startScreen">
     <h1>Avoid the Zones</h1>
-    <p>Utilise les flèches directionnelles ou ZQSD pour déplacer ton personnage</p>
-    <p>Évite la zone rouge ! Elle se déplace soudainement après avoir "pulsé"</p>
-    <button id="start-btn">Commencer</button>
+    <p>Utilise les touches ZQSD pour bouger<br />Evite la zone rouge aussi longtemps que tu peux.<br />Ton score augmente de 1 point par seconde (sauf pour Jean-Guile)</p>
+    <button onclick="startGame()">Start Game</button>
   </div>
-  <div id="game-over" style="display: none;">
+
+  <div id="gameOverScreen" style="display: none;">
     <h1>Game Over</h1>
-    <p id="final-score"></p>
-    <button id="restart-btn">Rejouer</button>
+    <p id="finalScore"></p>
+    <button onclick="location.reload()">Restart</button>
   </div>
-  <canvas id="game" width="800" height="600"></canvas>
+
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <audio id="bgMusic" src="https://cdn.pixabay.com/audio/2022/03/15/audio_04f29df5b7.mp3" loop autoplay></audio>
 
   <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const bgMusic = document.getElementById("bgMusic");
+    bgMusic.volume = 0.4;
 
-    const player = { x: 400, y: 300, radius: 15, speed: 4 };
+    let player = { x: 400, y: 300, size: 20, speed: 4, trail: [] };
     let keys = {};
-    let score = 0;
-    let startTime = null;
-    let gameInterval;
-    let speedIncrement = 0.2;
 
-    const zone = {
-      x: Math.random() * 700 + 50,
-      y: Math.random() * 500 + 50,
-      radius: 50,
-      nextMoveTime: 0,
+    let zone = {
+      x: Math.random() * 800,
+      y: Math.random() * 600,
+      radius: 30,
       pulse: 0,
-      delay: 2000,
-      speed: 2
+      speed: 1.5,
+      nextMoveTime: 0
     };
 
-    const homeScreen = document.getElementById('home');
-    const gameOverScreen = document.getElementById('game-over');
-    const finalScore = document.getElementById('final-score');
-    const startBtn = document.getElementById('start-btn');
-    const restartBtn = document.getElementById('restart-btn');
+    let score = 0;
+    let gameInterval;
+    let scoreInterval;
 
-    function resetGame() {
-      player.x = 400;
-      player.y = 300;
-      zone.x = Math.random() * 700 + 50;
-      zone.y = Math.random() * 500 + 50;
-      zone.delay = 2000;
-      zone.speed = 2;
-      zone.nextMoveTime = performance.now() + zone.delay;
-      score = 0;
-      startTime = performance.now();
-    }
-
-    function update(delta) {
-      // Player movement
-      if (keys['ArrowUp'] || keys['z']) player.y -= player.speed;
-      if (keys['ArrowDown'] || keys['s']) player.y += player.speed;
-      if (keys['ArrowLeft'] || keys['q']) player.x -= player.speed;
-      if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
-
-      // Stay within bounds
-      player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
-      player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
-
-      // Zone pulsation effect
-      const timeNow = performance.now();
-      zone.pulse = 5 * Math.sin((timeNow - zone.nextMoveTime + zone.delay) / 200 * Math.PI);
-
-      // Move the zone every few seconds
-      if (timeNow >= zone.nextMoveTime) {
-        const directions = [
-          { dx: zone.speed, dy: 0 },
-          { dx: -zone.speed, dy: 0 },
-          { dx: 0, dy: zone.speed },
-          { dx: 0, dy: -zone.speed }
-        ];
-        const dir = directions[Math.floor(Math.random() * directions.length)];
-        zone.x += dir.dx * 60;
-        zone.y += dir.dy * 60;
-
-        // Keep in bounds
-        zone.x = Math.max(zone.radius, Math.min(canvas.width - zone.radius, zone.x));
-        zone.y = Math.max(zone.radius, Math.min(canvas.height - zone.radius, zone.y));
-
-        zone.nextMoveTime = timeNow + zone.delay;
-
-        // Increase difficulty
-        if (zone.delay > 800) zone.delay -= 50;
-        zone.speed += speedIncrement;
-      }
-
-      // Collision
-      const dx = player.x - zone.x;
-      const dy = player.y - zone.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < player.radius + zone.radius) {
-        endGame();
-      }
-
-      // Score update
-      score = Math.floor((timeNow - startTime) / 1000);
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Zone
-      ctx.beginPath();
-      ctx.arc(zone.x, zone.y, zone.radius + zone.pulse, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 0, 70, 0.8)';
-      ctx.shadowColor = '#ff0055';
-      ctx.shadowBlur = 20;
-      ctx.fill();
-      ctx.closePath();
-
-      // Player
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-      ctx.fillStyle = '#00ffff';
-      ctx.shadowColor = '#00ffff';
-      ctx.shadowBlur = 15;
-      ctx.fill();
-      ctx.closePath();
-
-      // Score
-      ctx.fillStyle = '#00ffff';
-      ctx.shadowBlur = 0;
-      ctx.font = '20px monospace';
-      ctx.fillText(`Score: ${score}`, 20, 30);
-    }
-
-    function gameLoop(timestamp) {
-      update(timestamp);
-      draw();
+    function startGame() {
+      document.getElementById("startScreen").style.display = "none";
+      bgMusic.play();
       gameInterval = requestAnimationFrame(gameLoop);
+      scoreInterval = setInterval(() => score++, 1000);
     }
 
-    function endGame() {
-      cancelAnimationFrame(gameInterval);
-      finalScore.textContent = `Ton score : ${score} points`;
-      gameOverScreen.style.display = 'flex';
+    function drawPlayer() {
+      // Draw trail
+      player.trail.push({ x: player.x, y: player.y, alpha: 1 });
+      if (player.trail.length > 20) player.trail.shift();
+
+      for (let i = 0; i < player.trail.length; i++) {
+        const t = player.trail[i];
+        ctx.fillStyle = `rgba(0, 255, 153, ${t.alpha})`;
+        ctx.fillRect(t.x, t.y, player.size, player.size);
+        t.alpha -= 0.05;
+      }
+
+      // Draw player
+      ctx.fillStyle = "#00ff99";
+      ctx.fillRect(player.x, player.y, player.size, player.size);
     }
 
-    // Event listeners
-    window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+    function drawZone() {
+      const pulseRadius = zone.radius + Math.sin(zone.pulse) * 5;
+      const gradient = ctx.createRadialGradient(zone.x, zone.y, 0, zone.x, zone.y, pulseRadius);
+      gradient.addColorStop(0, "rgba(255,0,0,0.8)");
+      gradient.addColorStop(1, "rgba(255,0,0,0.1)");
+      ctx.beginPath();
+      ctx.arc(zone.x, zone.y, pulseRadius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      zone.pulse += 0.1;
+    }
 
-    startBtn.onclick = () => {
-      homeScreen.style.display = 'none';
-      resetGame();
-      gameLoop();
-    };
+    function movePlayer() {
+      if (keys["ArrowUp"] || keys["z"]) player.y -= player.speed;
+      if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
+      if (keys["ArrowLeft"] || keys["q"]) player.x -= player.speed;
+      if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
 
-    restartBtn.onclick = () => {
-      gameOverScreen.style.display = 'none';
-      resetGame();
-      gameLoop();
-    };
+      player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+    }
+
+    function moveZone(time) {
+      if (time > zone.nextMoveTime) {
+        const dx = player.x - zone.x;
+        const dy = player.y - zone.y;
+        const dist = Math.hypot(dx, dy);
+        const nx = dx / dist;
+        const ny = dy / dist;
+        zone.x += nx * zone.speed * 20;
+        zone.y += ny * zone.speed * 20;
+        zone.nextMoveTime = time + 500;
+        zone.speed += 0.002;
+      }
+    }
+
+    function checkCollision() {
+      const dx = player.x + player.size / 2 - zone.x;
+      const dy = player.y + player.size / 2 - zone.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      return distance < zone.radius + player.size / 2;
+    }
+
+    function gameLoop(time) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      movePlayer();
+      moveZone(time);
+      drawZone();
+      drawPlayer();
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + score, 10, 30);
+
+      if (checkCollision()) {
+        cancelAnimationFrame(gameInterval);
+        clearInterval(scoreInterval);
+        bgMusic.pause();
+        document.getElementById("gameOverScreen").style.display = "flex";
+        document.getElementById("finalScore").textContent = `Your score: ${score}`;
+      } else {
+        gameInterval = requestAnimationFrame(gameLoop);
+      }
+    }
+
+    window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
   </script>
 </body>
 </html>
