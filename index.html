@@ -52,8 +52,8 @@
 </head>
 <body>
   <div id="startScreen">
-    <h1>Evite la Zones</h1>
-    <p>Utilise les touches ZQSD pour te déplacer.<br />Evite la zone rouge et les obstacles aussi longtemps que tu peux, sinon, c'est GAME OVER.<br />Ton score augmente de 1 point par seconde (sauf pour Jean-Guile).</p>
+    <h1>Evite la Zone</h1>
+    <p>Utilise les touches ZQSD pour te déplacer.<br />Evite la zone et les obstacles aussi longtemps que tu peux, sinon c'est GAME OVER.<br />Ton score augmente de 1 point par seconde (sauf pour Jean-Guile).</p>
     <button onclick="startGame()">Start Game</button>
   </div>
 
@@ -85,31 +85,19 @@
       lastTarget: { x: 400, y: 300 }
     };
 
-    let obstacles = [];
-    let signalFlash = false;
-    let nextObstacleMove = Date.now() + 10000;
-
-    function generateObstacles() {
-      obstacles = [];
-      for (let i = 0; i < 5; i++) {
-        const size = 30;
-        const x = Math.random() * (canvas.width - size);
-        const y = Math.random() * (canvas.height - size);
-        obstacles.push({ x, y, size });
-      }
-    }
-
-    generateObstacles();
-
     let score = 0;
     let gameInterval;
     let scoreInterval;
+    let speedIncreaseInterval;
 
     function startGame() {
       document.getElementById("startScreen").style.display = "none";
       bgMusic.play();
       gameInterval = requestAnimationFrame(gameLoop);
       scoreInterval = setInterval(() => score++, 1000);
+      speedIncreaseInterval = setInterval(() => {
+        zone.speed += 0.5;
+      }, 20000);
     }
 
     function drawPlayer() {
@@ -139,13 +127,6 @@
       zone.pulse += 0.1;
     }
 
-    function drawObstacles() {
-      for (const obs of obstacles) {
-        ctx.fillStyle = signalFlash ? "yellow" : "#555";
-        ctx.fillRect(obs.x, obs.y, obs.size, obs.size);
-      }
-    }
-
     function movePlayer() {
       if (keys["arrowup"] || keys["z"]) player.y -= player.speed;
       if (keys["arrowdown"] || keys["s"]) player.y += player.speed;
@@ -170,7 +151,6 @@
 
           zone.x += nx * zone.speed * 20;
           zone.y += ny * zone.speed * 20;
-          zone.speed += 0.003;
         }
 
         zone.nextMoveTime = time + 700;
@@ -181,35 +161,14 @@
       const dx = player.x + player.size / 2 - zone.x;
       const dy = player.y + player.size / 2 - zone.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance < zone.radius + player.size / 2) return true;
-
-      for (const obs of obstacles) {
-        if (
-          player.x < obs.x + obs.size &&
-          player.x + player.size > obs.x &&
-          player.y < obs.y + obs.size &&
-          player.y + player.size > obs.y
-        ) return true;
-      }
-
-      return false;
+      return distance < zone.radius + player.size / 2;
     }
 
     function gameLoop(time) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       movePlayer();
       moveZone(time);
-
-      if (Date.now() > nextObstacleMove - 1000) signalFlash = !signalFlash;
-
-      if (Date.now() > nextObstacleMove) {
-        generateObstacles();
-        signalFlash = false;
-        nextObstacleMove = Date.now() + 10000;
-      }
-
       drawZone();
-      drawObstacles();
       drawPlayer();
 
       ctx.fillStyle = "#fff";
@@ -219,6 +178,7 @@
       if (checkCollision()) {
         cancelAnimationFrame(gameInterval);
         clearInterval(scoreInterval);
+        clearInterval(speedIncreaseInterval);
         bgMusic.pause();
         document.getElementById("gameOverScreen").style.display = "flex";
         document.getElementById("finalScore").textContent = `Your score: ${score}`;
