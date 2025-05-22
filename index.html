@@ -52,8 +52,8 @@
 </head>
 <body>
   <div id="startScreen">
-    <h1>Evite la Zone</h1>
-    <p>Utilise les touches ZQSD pour te déplacer.<br />Evite la zone et les obstacles aussi longtemps que tu peux, sinon c'est GAME OVER.<br />Ton score augmente de 1 point par seconde (sauf pour Jean-Guile).</p>
+    <h1>Avoid the Zones</h1>
+    <p>Utilise les touches ZQSD pour te déplacer.<br />Evite la zone rouge et les obstacles.<br />Ton score augmente de 1 point par seconde (sauf pour Jean-Guile).</p>
     <button onclick="startGame()">Start Game</button>
   </div>
 
@@ -81,31 +81,52 @@
       radius: 30,
       pulse: 0,
       speed: 2.5,
-      nextMoveTime: 0,
-      lastTarget: { x: 400, y: 300 }
+      nextMoveTime: 0
     };
+
+    let obstacles = [];
+    let obstacleTimer = 0;
+    let flashing = false;
+    let flashStartTime = 0;
 
     let score = 0;
     let gameInterval;
     let scoreInterval;
     let speedIncreaseInterval;
 
-    function startGame() {
-      document.getElementById("startScreen").style.display = "none";
-      bgMusic.play();
-      gameInterval = requestAnimationFrame(gameLoop);
-      scoreInterval = setInterval(() => score++, 1000);
-      speedIncreaseInterval = setInterval(() => {
-        zone.speed += 0.5;
-      }, 20000);
+    function generateObstacles(count = 5) {
+      obstacles = [];
+      for (let i = 0; i < count; i++) {
+        obstacles.push({
+          x: Math.random() * (canvas.width - 40),
+          y: Math.random() * (canvas.height - 40),
+          size: 40
+        });
+      }
+    }
+
+    function drawObstacles() {
+      for (const obs of obstacles) {
+        ctx.fillStyle = flashing ? '#ffff00' : '#ff9933';
+        ctx.fillRect(obs.x, obs.y, obs.size, obs.size);
+      }
+    }
+
+    function movePlayer() {
+      if (keys["arrowup"] || keys["z"]) player.y -= player.speed;
+      if (keys["arrowdown"] || keys["s"]) player.y += player.speed;
+      if (keys["arrowleft"] || keys["q"]) player.x -= player.speed;
+      if (keys["arrowright"] || keys["d"]) player.x += player.speed;
+
+      player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+      player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
     }
 
     function drawPlayer() {
       player.trail.push({ x: player.x, y: player.y, alpha: 1 });
       if (player.trail.length > 20) player.trail.shift();
 
-      for (let i = 0; i < player.trail.length; i++) {
-        const t = player.trail[i];
+      for (let t of player.trail) {
         ctx.fillStyle = `rgba(0, 255, 153, ${t.alpha})`;
         ctx.fillRect(t.x, t.y, player.size, player.size);
         t.alpha -= 0.05;
@@ -125,16 +146,6 @@
       ctx.fillStyle = gradient;
       ctx.fill();
       zone.pulse += 0.1;
-    }
-
-    function movePlayer() {
-      if (keys["arrowup"] || keys["z"]) player.y -= player.speed;
-      if (keys["arrowdown"] || keys["s"]) player.y += player.speed;
-      if (keys["arrowleft"] || keys["q"]) player.x -= player.speed;
-      if (keys["arrowright"] || keys["d"]) player.x += player.speed;
-
-      player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
-      player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
     }
 
     function moveZone(time) {
@@ -161,14 +172,26 @@
       const dx = player.x + player.size / 2 - zone.x;
       const dy = player.y + player.size / 2 - zone.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      return distance < zone.radius + player.size / 2;
+      if (distance < zone.radius + player.size / 2) return true;
+
+      for (const obs of obstacles) {
+        if (
+          player.x < obs.x + obs.size &&
+          player.x + player.size > obs.x &&
+          player.y < obs.y + obs.size &&
+          player.y + player.size > obs.y
+        ) return true;
+      }
+      return false;
     }
 
-    function gameLoop(time) {
+    function gameLoop(timestamp) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       movePlayer();
-      moveZone(time);
+      moveZone(timestamp);
+
       drawZone();
+      drawObstacles();
       drawPlayer();
 
       ctx.fillStyle = "#fff";
@@ -182,9 +205,29 @@
         bgMusic.pause();
         document.getElementById("gameOverScreen").style.display = "flex";
         document.getElementById("finalScore").textContent = `Your score: ${score}`;
-      } else {
-        gameInterval = requestAnimationFrame(gameLoop);
+        return;
       }
+
+      if (timestamp > obstacleTimer + 10000) {
+        flashing = true;
+        flashStartTime = timestamp;
+        setTimeout(() => {
+          generateObstacles();
+          flashing = false;
+          obstacleTimer = timestamp;
+        }, 1000);
+      }
+
+      gameInterval = requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      document.getElementById("startScreen").style.display = "none";
+      bgMusic.play();
+      generateObstacles();
+      gameInterval = requestAnimationFrame(gameLoop);
+      scoreInterval = setInterval(() => score++, 1000);
+      speedIncreaseInterval = setInterval(() => zone.speed += 0.5, 20000);
     }
 
     window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
